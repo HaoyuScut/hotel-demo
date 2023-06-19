@@ -26,4 +26,6 @@ public class HotelController {
     public PageResult search(@RequestBody RequestParams params) {
         return hotelService.search(params);
     }
+
+
 }

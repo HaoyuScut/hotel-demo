@@ -13,6 +13,7 @@ import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
@@ -40,12 +41,8 @@ public class HotelService extends ServiceImpl<HotelMapper, Hotel> implements IHo
             SearchRequest request = new SearchRequest("hotel");
             //2.准备DSL
             //2.1 关键字搜索query
-            String key = params.getKey();
-            if(key == null || key.equals("")) {
-                request.source().query(QueryBuilders.matchAllQuery());
-            } else {
-                request.source().query(QueryBuilders.matchQuery("all", key));
-            }
+            // 构建BooleanQuery
+            buildBasicQuery(params, request);
             //2.2分页
             int page = params.getPage();
             int size = params.getSize();
@@ -60,6 +57,37 @@ public class HotelService extends ServiceImpl<HotelMapper, Hotel> implements IHo
             throw new RuntimeException(e);
         }
     }
+
+    private static void buildBasicQuery(RequestParams params, SearchRequest request) {
+        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
+        //关键字搜索
+        String key = params.getKey();
+        if (key == null || key.equals("")) {
+            boolQuery.must(QueryBuilders.matchAllQuery());
+        } else {
+            boolQuery.must(QueryBuilders.matchQuery("all", key));
+        }
+        // 条件过滤
+        //城市条件
+        if(params.getCity() != null && !params.getCity().equals("")) {
+            boolQuery.filter(QueryBuilders.termQuery("city", params.getCity()));
+        }
+        //品牌条件
+        if(params.getBrand() != null && !params.getBrand().equals("")) {
+            boolQuery.filter(QueryBuilders.termQuery("brand", params.getBrand()));
+        }
+        //星级条件
+        if(params.getStartName() != null && !params.getStartName().equals("")) {
+            boolQuery.filter(QueryBuilders.termQuery("startName", params.getStartName()));
+        }
+        //价格
+        if(params.getMinPrice() != null && params.getMaxPrice() != null) {
+            boolQuery.filter(QueryBuilders
+                    .rangeQuery("price").gte(params.getMinPrice()).lte(params.getMaxPrice()));
+        }
+        request.source().query(boolQuery);
+    }
+
 
     private static PageResult handleResponse(SearchResponse response) {
         //4.解析结果

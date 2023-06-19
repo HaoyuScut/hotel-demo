@@ -7,4 +7,6 @@ import com.baomidou.mybatisplus.extension.service.IService;
 
 public interface IHotelService extends IService<Hotel> {
     PageResult search(RequestParams params);
+
+
 }
