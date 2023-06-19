@@ -1,0 +1,17 @@
+server:
+  port: 8089
+spring:
+  datasource:
+    url: jdbc:mysql://192.168.200.135:3306/heima?useSSL=false
+    username: root
+    password: why133640800
+    driver-class-name: com.mysql.jdbc.Driver
+logging:
+  level:
+    cn.itcast: debug
+  pattern:
+    dateformat: MM-dd HH:mm:ss:SSS
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  type-aliases-package: cn.itcast.hotel.pojo
