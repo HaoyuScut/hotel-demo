@@ -13,12 +13,19 @@ import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.geo.GeoPoint;
+import org.elasticsearch.common.unit.DistanceUnit;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.query.functionscore.FunctionScoreQueryBuilder;
+import org.elasticsearch.index.query.functionscore.ScoreFunctionBuilder;
+import org.elasticsearch.index.query.functionscore.ScoreFunctionBuilders;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightField;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -46,7 +53,16 @@ public class HotelService extends ServiceImpl<HotelMapper, Hotel> implements IHo
             //2.2分页
             int page = params.getPage();
             int size = params.getSize();
-            ;
+
+            //2.3 排序
+            String location = params.getLocation();
+            if (location != null && !location.equals("")) {
+                request.source().sort(SortBuilders
+                        .geoDistanceSort("location", new GeoPoint(location))
+                        .order(SortOrder.ASC)
+                        .unit(DistanceUnit.KILOMETERS));
+            }
+
             request.source().from((page - 1) * size).size(size);
             //3.发送请求
             SearchResponse response = client.search(request, RequestOptions.DEFAULT);
@@ -59,6 +75,7 @@ public class HotelService extends ServiceImpl<HotelMapper, Hotel> implements IHo
     }
 
     private static void buildBasicQuery(RequestParams params, SearchRequest request) {
+        //1.构建BooleanQuery
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
         //关键字搜索
         String key = params.getKey();
@@ -69,23 +86,40 @@ public class HotelService extends ServiceImpl<HotelMapper, Hotel> implements IHo
         }
         // 条件过滤
         //城市条件
-        if(params.getCity() != null && !params.getCity().equals("")) {
+        if (params.getCity() != null && !params.getCity().equals("")) {
             boolQuery.filter(QueryBuilders.termQuery("city", params.getCity()));
         }
         //品牌条件
-        if(params.getBrand() != null && !params.getBrand().equals("")) {
+        if (params.getBrand() != null && !params.getBrand().equals("")) {
             boolQuery.filter(QueryBuilders.termQuery("brand", params.getBrand()));
         }
         //星级条件
-        if(params.getStartName() != null && !params.getStartName().equals("")) {
+        if (params.getStartName() != null && !params.getStartName().equals("")) {
             boolQuery.filter(QueryBuilders.termQuery("startName", params.getStartName()));
         }
         //价格
-        if(params.getMinPrice() != null && params.getMaxPrice() != null) {
+        if (params.getMinPrice() != null && params.getMaxPrice() != null) {
             boolQuery.filter(QueryBuilders
                     .rangeQuery("price").gte(params.getMinPrice()).lte(params.getMaxPrice()));
         }
-        request.source().query(boolQuery);
+
+        //2.算分控制
+        FunctionScoreQueryBuilder functionScoreQuery =
+                QueryBuilders.functionScoreQuery(
+                        //原始查询，相关性算分的查询
+                        boolQuery,
+                        //function score的数组
+                        new FunctionScoreQueryBuilder.FilterFunctionBuilder[]{
+                                ////其中的一个function score元素
+                                new FunctionScoreQueryBuilder.FilterFunctionBuilder(
+                                        //过滤条件
+                                        QueryBuilders.termQuery("isAD", "true"),
+                                        //算分函数
+                                        ScoreFunctionBuilders.weightFactorFunction(10)
+                                )
+                        });
+
+        request.source().query(functionScoreQuery);
     }
 
 
@@ -104,6 +138,13 @@ public class HotelService extends ServiceImpl<HotelMapper, Hotel> implements IHo
             String json = hit.getSourceAsString();
             //反序列化
             HotelDoc hotelDoc = JSON.parseObject(json, HotelDoc.class);
+
+            //获取排序值
+            Object[] sortValues = hit.getSortValues();
+            if (sortValues.length > 0) {
+                Object sortValue = sortValues[0];
+                hotelDoc.setDistance(sortValue);
+            }
             hotels.add(hotelDoc);
 //            System.out.println(hotelDoc);
         }
